@@ -1,0 +1,70 @@
+---
+title: "Replication with Robets for Control"
+output: html_notebook
+---
+
+
+```{r}
+library("tidyr")
+library("ICSNP")
+library("robustbase")
+library("ggplot2")
+library("robets")
+```
+
+```{r}
+N <- 10000
+mu <- 2
+sigma <- 1/2
+
+X_w = rweibull(N, shape=mu, scale=sigma)
+Y = rexp(N*0.1, rate=mu)
+Y_w = rcauchy(N*0.1, location=mu, scale=sigma/100)
+X_Y = c(X_w, Y_w)
+hist(X_Y)
+```
+```{r}
+# source("C:/Users/omara/OneDrive/Documents/GitHub/robets/R/robets.R")
+source("C:/Users/omara/OneDrive/Documents/MCD/Tesis/Code/R/robets_ahenao.R")
+```
+
+
+```{r}
+m_mad <- robets(X_Y, model="AAN", scale.estimator="mad")
+m_Qn <- robets(X_Y, model="AAN", scale.estimator="Qn")
+m_Sn <- robets(X_Y, model="AAN", scale.estimator="Sn")
+m_Pn <- robets(X_Y, model="AAN", scale.estimator="Pn")
+```
+
+```{r}
+m_mad
+```
+
+
+```{r}
+m_Qn
+```
+
+```{r}
+m_Pn
+```
+
+
+```{r}
+print(m_mad$mse)
+print(m_Sn$mse)
+print(m_Qn$mse)
+print(m_Pn$mse)
+```
+```{r}
+print(mean(m_mad$outliers))
+print(mean(m_Sn$outliers))
+print(mean(m_Qn$outliers))
+print(mean(m_Pn$outliers))
+```
+
+```{r}
+tail(m_Pn$states)
+```
+
+

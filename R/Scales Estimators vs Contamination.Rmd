@@ -1,0 +1,231 @@
+---
+title: "Scales Estimators vs Contamination"
+output: html_notebook
+---
+
+```{r}
+library("tidyr")
+library("ICSNP")
+library("robustbase")
+library("ggplot2")
+library("pracma")
+library("MASS")
+```
+Pn extracted from https://github.com/garthtarr/robnetwork/blob/master/covest.R using Pn scale estimator
+
+```{r}
+Pn = function(y){
+  n = length(y)
+  y.pairs = pair.sum(matrix(y))/2
+  c_t = 1/0.9539
+  scale_estim = c_t*as.numeric(diff(quantile(y.pairs,c(0.25,0.75),type=1)))
+  correction.factors =
+    c(1.128,1.303,1.109,1.064,1.166,1.103,1.087,1.105,1.047,1.063,1.057,1.040, 
+      1.061,1.047,1.043,1.048,1.031,1.037,1.035,1.028,1.036,1.030,1.029,1.032, 
+      1.023,1.025,1.024,1.021,1.026,1.022,1.021,1.023,1.018,1.020,1.019,1.017, 
+      1.020,1.018,1.017,1.018,1.015,1.016,1.016,1.014,1.016,1.015,1.014,1.015)
+  if(n <= 40){
+    scale_estim = scale_estim*correction.factors[n-2]
+  } else if(n > 40) scale_estim = scale_estim*n/(n-0.7)
+  return(scale_estim)
+}
+```
+
+
+SIMULATED DATA
+
+
+```{r}
+# MODEL 1
+sepa = 50
+t = linspace(0,1,sepa)
+dift = max(diff(t))
+c = 0.2
+n = 100
+clean = ceiling(n*(1-c))
+outs =  n - clean
+noise1 = 0.3*exp(-abs(dift)/0.3)
+mu = rep(0,sepa)
+sigma = matrix(noise1, sepa, sepa)
+for (i in 1:sepa) {
+  for (j in 1:sepa) {
+    sigma[i,j] = 0.3*exp(-abs(t[i]-t[j])/0.3)
+  }
+}
+Main1 = matrix(0, nrow = n, ncol = length(t))
+for (i in 1:clean) {
+  Main1[i,] = 30*t*((1-t)^(3/2)) + mvrnorm(1, mu, sigma)
+}
+for (i in (clean+1):n) {
+  Main1[i,] = 30*(t^(3/2))*(1-t) + mvrnorm(1, mu, sigma)
+}
+
+#plot(Main1[1,], type="l", col="black", lwd=2)
+#lines(-Main1[2,], col="red", lwd=2)
+#lines(Main1[3,], col="blue", lwd=2)
+data <- c()
+for (i in (clean+1):n) {
+  if (mod(i, 2) == 0) t = 1
+  else t=-1
+  data <- c(data, t*Main1[i,])
+} 
+plot(data, type="l", lwd=2)
+```
+
+
+
+```{r}
+# MODEL 2
+sepa = 50
+t = linspace(0,1,sepa)
+dift = max(diff(t))
+c = 0.2
+n = 100
+clean = ceiling(n*(1-c))
+outs =  n - clean
+noise1 = exp(-abs(dift))
+mu = rep(0,sepa)
+sigma = matrix(noise1, sepa, sepa)
+for (i in 1:sepa) {
+  for (j in 1:sepa) {
+    sigma[i,j] = exp(-abs(t[i]-t[j]))
+  }
+}
+Main1 = matrix(0, nrow = n, ncol = length(t))
+for (i in 1:clean) {
+  Main1[i,] = 4*t + mvrnorm(1, mu, sigma)
+}
+for (i in (clean+1):n) {
+  Main1[i,] = 4*t + 1.8*((-1)^rbinom(1,1,0.5)) + (1/sqrt(2*pi*0.01))*exp(-((t-runif(1,0.25,0.75))^2)/0.02) + mvrnorm(1, mu, sigma)
+}
+
+data <- c()
+for (i in (clean+1):n) {
+  if (mod(i, 2) == 0) t = 1
+  else t=-1
+  data <- c(data, t*Main1[i,])
+} 
+plot(data, type="l", lwd=2)
+```
+
+```{r}
+# MODEL 3
+sepa = 50
+t = linspace(0,1,sepa)
+dift = max(diff(t))
+c = 0.2
+n = 100
+clean = ceiling(n*(1-c))
+outs =  n - clean
+noise1 = exp(-abs(dift))
+mu = rep(0,sepa)
+sigma = matrix(noise1, sepa, sepa)
+for (i in 1:sepa) {
+  for (j in 1:sepa) {
+    sigma[i,j] = exp(-abs(t[i]-t[j]))
+  }
+}
+Main1 = matrix(0, nrow = n, ncol = length(t))
+for (i in 1:clean) {
+  Main1[i,] = 4*t + mvrnorm(1, mu, sigma)
+}
+for (i in (clean+1):n) {
+  Main1[i,] = 4*t + 2*sin(4*(t+runif(1,0.25,0.75))*pi) + mvrnorm(1, mu, sigma)
+}
+data <- c()
+for (i in (clean+1):n) {
+  if (mod(i, 2) == 0) t = 1
+  else t=-1
+  data <- c(data, t*Main1[i,])
+} 
+plot(data, type="l", lwd=2)
+```
+
+```{r}
+data_cont <- data
+scales <- matrix(ncol=6)
+for (i in seq(0.01, 0.4, 0.01)) {
+  alfa <- round(length(data) * i)
+  for (j in seq(1, alfa, 1)){
+    w = round(runif(1, 1, length(data)))
+    if (mod(w, 2) == 0) data_cont[w] <- data_cont[w]*1.15
+    #else data_cont[w]<- data_cont[w]*-sd(data)/10
+  }
+  scales <- rbind(scales, c(Pn(data_cont), Qn(data_cont), Sn(data_cont), mad(data_cont), sd(data_cont), IQR(data_cont)))
+}
+scales <- cbind(scales, seq(1, nrow(scales)))
+colnames(scales) <- c("Pn", "Qn", "Sn", "MAD", "SD", "IQR", "X")
+
+df <- data.frame(scales) %>%
+  gather(key, value, -X)
+p <- ggplot(df, aes(X, value, color = key)) + geom_line()
+plotly::ggplotly(p)
+#plot(data_cont, type="l", lwd=1)
+```
+
+```{r}
+set.seed(seed = 13032022) #seed es la fecha
+e <- rnorm(500,mean=0,sd=1)
+
+alpha <- 0.5
+beta <- 0.003
+theta <- 0.9
+m_1 <- 0
+for(i in 2:length(e)){
+  m_1[i] <- alpha+beta*i+theta*m_1[i-1]+e[i]
+}
+plot(m_1, type="l")
+```
+
+
+```{r}
+data_cont <- c()
+data_cont <- m_1
+scales <- matrix(ncol=6)
+contamination_seq <- seq(0.01, 0.4, 0.01)
+n <- length(contamination_seq)
+for (i in contamination_seq) {
+  alfa <- round(length(data_cont) * i)
+  for (j in seq(1, alfa, 1)){
+    w = round(runif(1, 1, length(data_cont)))
+    if (mod(w, 2) == 0) data_cont[w] <- data_cont[w]*1.15
+    #else data_cont[w]<- data_cont[w]*-sd(data)/10
+  }
+  scales <- rbind(scales, c(Pn(data_cont), Qn(data_cont), Sn(data_cont), mad(data_cont), sd(data_cont), IQR(data_cont)))
+}
+scales <- cbind(scales, seq(1, nrow(scales)))
+colnames(scales) <- c("Pn", "Qn", "Sn", "MAD", "SD", "IQR", "X")
+
+df <- data.frame(scales) %>%
+  gather(key, value, -X)
+p <- ggplot(df, aes(X, value, color = key)) + geom_line()
+plotly::ggplotly(p)
+#plot(data_cont, type="l", lwd=1)
+```
+```{r}
+# RANDOM  PORCENTUAL CONTAMINATION
+data_cont <- c()
+data_cont <- m_1
+contamination <- c()
+c_seq <- seq(0.1, 0.4, 0.1)
+set.seed(seed = 13032022)
+e <- rnorm(1,mean=0,sd=1)
+for (i in c_seq) {
+  alfa <- round(length(data_cont) * i)
+  data_cont<-m_1
+  for (j in seq(1, alfa, 1)){
+    w = round(runif(1, 1, length(data_cont)))
+    if (mod(w, 2) == 0) data_cont[w] <- data_cont[w]+e*1.5
+    else data_cont[w]<- data_cont[w]-e*1.5
+  }
+  contamination <- cbind(contamination, data_cont)
+}
+colnames(contamination) <- c_seq
+contamination <- cbind(contamination, seq(1, nrow(contamination)))
+colnames(contamination)[ncol(contamination)] <- "X"
+df <- data.frame(contamination) %>%
+  gather(key, value, -X)
+p <- ggplot(df, aes(X, value, color = key)) + geom_line()
+plotly::ggplotly(p)
+# head(contamination)
+```
